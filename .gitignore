@@ -37,3 +37,6 @@ website/vendor
 # Coverage
 coverage.html
 coverage.out
+
+# Built binary
+terraform-provider-n8n
