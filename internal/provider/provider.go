@@ -180,7 +180,9 @@ func (p *n8nProvider) DataSources(_ context.Context) []func() datasource.DataSou
 
 // Resources defines the resources implemented in the provider.
 func (p *n8nProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{}
+	return []func() resource.Resource{
+		NewWorkflowResource,
+	}
 }
 
 // Functions defines the functions implemented in the provider.
