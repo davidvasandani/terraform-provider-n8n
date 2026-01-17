@@ -26,6 +26,7 @@ var (
 	_ resource.Resource                = &workflowResource{}
 	_ resource.ResourceWithConfigure   = &workflowResource{}
 	_ resource.ResourceWithImportState = &workflowResource{}
+	_ resource.ResourceWithModifyPlan  = &workflowResource{}
 )
 
 // NewWorkflowResource returns a new resource.
@@ -437,4 +438,85 @@ func (r *workflowResource) Delete(ctx context.Context, req resource.DeleteReques
 
 func (r *workflowResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// ModifyPlan implements resource-level plan modification to prevent unnecessary updates.
+// When only computed fields (updated_at, version_id) differ, we preserve state values
+// to avoid triggering an update that would only change timestamps.
+func (r *workflowResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	// Skip during create (no state) or destroy (no plan)
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return
+	}
+
+	var plan, state workflowResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Check if any content fields actually changed
+	contentChanged := false
+
+	// Compare name
+	if !plan.Name.Equal(state.Name) {
+		contentChanged = true
+	}
+
+	// Compare active
+	if !plan.Active.Equal(state.Active) {
+		contentChanged = true
+	}
+
+	// Compare nodes (using semantic equality)
+	if !plan.Nodes.IsUnknown() && !state.Nodes.IsUnknown() {
+		if !jsonSemanticEqual(plan.Nodes.ValueString(), state.Nodes.ValueString()) {
+			contentChanged = true
+		}
+	}
+
+	// Compare connections (using semantic equality)
+	if !plan.Connections.IsUnknown() && !state.Connections.IsUnknown() {
+		if !jsonSemanticEqual(plan.Connections.ValueString(), state.Connections.ValueString()) {
+			contentChanged = true
+		}
+	}
+
+	// Compare settings
+	if plan.Settings != nil && state.Settings != nil {
+		if !plan.Settings.SaveExecutionProgress.Equal(state.Settings.SaveExecutionProgress) ||
+			!plan.Settings.SaveManualExecutions.Equal(state.Settings.SaveManualExecutions) ||
+			!plan.Settings.SaveDataErrorExecution.Equal(state.Settings.SaveDataErrorExecution) ||
+			!plan.Settings.SaveDataSuccessExecution.Equal(state.Settings.SaveDataSuccessExecution) ||
+			!plan.Settings.ExecutionTimeout.Equal(state.Settings.ExecutionTimeout) ||
+			!plan.Settings.ErrorWorkflow.Equal(state.Settings.ErrorWorkflow) ||
+			!plan.Settings.Timezone.Equal(state.Settings.Timezone) ||
+			!plan.Settings.ExecutionOrder.Equal(state.Settings.ExecutionOrder) {
+			contentChanged = true
+		}
+	} else if (plan.Settings == nil) != (state.Settings == nil) {
+		contentChanged = true
+	}
+
+	tflog.Debug(ctx, "ModifyPlan content comparison", map[string]any{
+		"contentChanged": contentChanged,
+		"workflowId":     state.ID.ValueString(),
+	})
+
+	// If no content changed, preserve computed field values from state
+	// This prevents unnecessary updates that would only change timestamps
+	if !contentChanged {
+		// Preserve version_id from state
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("version_id"), state.VersionId)...)
+		// Preserve updated_at from state
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("updated_at"), state.UpdatedAt)...)
+		// Also preserve nodes and connections with state values to ensure no diff
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("nodes"), state.Nodes)...)
+		resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("connections"), state.Connections)...)
+
+		tflog.Debug(ctx, "No content changes detected, preserving state values for computed fields", map[string]any{
+			"workflowId": state.ID.ValueString(),
+		})
+	}
 }
