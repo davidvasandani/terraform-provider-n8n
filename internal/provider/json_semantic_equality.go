@@ -64,6 +64,8 @@ func (m jsonSemanticEqualityModifier) PlanModifyString(ctx context.Context, req 
 
 // jsonSemanticEqual compares two JSON strings for semantic equality.
 // Returns true if both strings parse to equivalent JSON structures.
+// It normalizes both structures by removing null values and optional
+// fields that n8n might not return (like executeOnce, alwaysOutputData).
 func jsonSemanticEqual(a, b string) bool {
 	var objA, objB interface{}
 
@@ -75,7 +77,68 @@ func jsonSemanticEqual(a, b string) bool {
 		return false
 	}
 
-	return reflect.DeepEqual(objA, objB)
+	// Normalize both objects to handle n8n API inconsistencies
+	normalizedA := normalizeForComparison(objA)
+	normalizedB := normalizeForComparison(objB)
+
+	return reflect.DeepEqual(normalizedA, normalizedB)
+}
+
+// normalizeForComparison recursively processes JSON data to normalize it for comparison.
+// It removes null values and optional node fields that n8n might not consistently return.
+func normalizeForComparison(data interface{}) interface{} {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for key, value := range v {
+			// Skip null values
+			if value == nil {
+				continue
+			}
+			// Skip optional node fields that n8n doesn't consistently return
+			// These fields have default values and may be omitted from API responses
+			if isOptionalNodeField(key) {
+				continue
+			}
+			result[key] = normalizeForComparison(value)
+		}
+		// Return nil for empty maps to handle {} vs missing field equivalence
+		if len(result) == 0 {
+			return nil
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, 0, len(v))
+		for _, item := range v {
+			normalized := normalizeForComparison(item)
+			// Don't add nil items to arrays
+			if normalized != nil {
+				result = append(result, normalized)
+			}
+		}
+		// Return nil for empty arrays
+		if len(result) == 0 {
+			return nil
+		}
+		return result
+	default:
+		return v
+	}
+}
+
+// isOptionalNodeField returns true for node fields that n8n doesn't consistently
+// return in API responses. These have default values and should be ignored
+// when comparing config vs state.
+func isOptionalNodeField(key string) bool {
+	optionalFields := map[string]bool{
+		"executeOnce":      true, // Default: false
+		"alwaysOutputData": true, // Default: false
+		"retryOnFail":      true, // Default: false
+		"onError":          true, // Has default value
+		"continueOnFail":   true, // Default: false
+		"disabled":         true, // Default: false
+	}
+	return optionalFields[key]
 }
 
 // NormalizeJSON takes a JSON string and returns a normalized version

@@ -203,3 +203,95 @@ func TestNormalizeJSONIdempotent(t *testing.T) {
 		t.Errorf("NormalizeJSON is not idempotent: %q != %q", first, second)
 	}
 }
+
+func TestJsonSemanticEqualWithNullValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        string
+		b        string
+		expected bool
+	}{
+		{
+			name:     "null value vs missing key",
+			a:        `{"key": "value", "main": null}`,
+			b:        `{"key": "value"}`,
+			expected: true,
+		},
+		{
+			name:     "nested null value",
+			a:        `{"outer": {"inner": null, "keep": "this"}}`,
+			b:        `{"outer": {"keep": "this"}}`,
+			expected: true,
+		},
+		{
+			name:     "connection with main null vs ai_languageModel",
+			a:        `{"Google Gemini Chat Model1": {"main": null}}`,
+			b:        `{"Google Gemini Chat Model1": {"ai_languageModel": [[[{"index": 0, "node": "AI Agent", "type": "ai_languageModel"}]]]}}`,
+			expected: false, // These are actually different - one has content
+		},
+		{
+			name:     "both have main null",
+			a:        `{"Google Gemini Chat Model1": {"main": null}}`,
+			b:        `{"Google Gemini Chat Model1": {"main": null}}`,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := jsonSemanticEqual(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("jsonSemanticEqual(%q, %q) = %v, want %v", tt.a, tt.b, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestJsonSemanticEqualWithOptionalFields(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        string
+		b        string
+		expected bool
+	}{
+		{
+			name:     "executeOnce present vs missing",
+			a:        `{"id": "node1", "executeOnce": false}`,
+			b:        `{"id": "node1"}`,
+			expected: true,
+		},
+		{
+			name:     "alwaysOutputData present vs missing",
+			a:        `{"id": "node1", "alwaysOutputData": false}`,
+			b:        `{"id": "node1"}`,
+			expected: true,
+		},
+		{
+			name:     "multiple optional fields",
+			a:        `{"id": "node1", "executeOnce": false, "alwaysOutputData": true, "retryOnFail": false}`,
+			b:        `{"id": "node1"}`,
+			expected: true,
+		},
+		{
+			name:     "nested in array",
+			a:        `[{"id": "node1", "executeOnce": false}, {"id": "node2"}]`,
+			b:        `[{"id": "node1"}, {"id": "node2"}]`,
+			expected: true,
+		},
+		{
+			name:     "realistic node comparison with optional fields",
+			a:        `[{"id":"get-articles","name":"Get articles","executeOnce":false,"alwaysOutputData":false}]`,
+			b:        `[{"id":"get-articles","name":"Get articles"}]`,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := jsonSemanticEqual(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("jsonSemanticEqual(%q, %q) = %v, want %v", tt.a, tt.b, result, tt.expected)
+			}
+		})
+	}
+}
