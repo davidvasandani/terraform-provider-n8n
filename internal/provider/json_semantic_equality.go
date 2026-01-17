@@ -86,6 +86,8 @@ func jsonSemanticEqual(a, b string) bool {
 
 // normalizeForComparison recursively processes JSON data to normalize it for comparison.
 // It removes null values and optional node fields that n8n might not consistently return.
+// For arrays of objects with a "key" field (like parameters), it converts them to maps
+// to make comparison order-independent.
 func normalizeForComparison(data interface{}) interface{} {
 	switch v := data.(type) {
 	case map[string]interface{}:
@@ -108,6 +110,12 @@ func normalizeForComparison(data interface{}) interface{} {
 		}
 		return result
 	case []interface{}:
+		// Check if this is an array of objects with "key" fields (like parameters)
+		// If so, convert to a map keyed by "key" for order-independent comparison
+		if keyedMap := tryConvertToKeyedMap(v); keyedMap != nil {
+			return normalizeForComparison(keyedMap)
+		}
+
 		result := make([]interface{}, 0, len(v))
 		for _, item := range v {
 			normalized := normalizeForComparison(item)
@@ -124,6 +132,42 @@ func normalizeForComparison(data interface{}) interface{} {
 	default:
 		return v
 	}
+}
+
+// tryConvertToKeyedMap checks if an array contains objects with unique "key" fields.
+// If so, it converts the array to a map keyed by those values for order-independent comparison.
+// This handles n8n's parameters arrays which may be returned in different orders.
+func tryConvertToKeyedMap(arr []interface{}) map[string]interface{} {
+	if len(arr) == 0 {
+		return nil
+	}
+
+	// Check if all items are objects with a "key" field
+	keys := make(map[string]interface{})
+	for _, item := range arr {
+		obj, ok := item.(map[string]interface{})
+		if !ok {
+			return nil // Not all items are objects
+		}
+
+		keyVal, hasKey := obj["key"]
+		if !hasKey {
+			return nil // Not all items have a "key" field
+		}
+
+		keyStr, ok := keyVal.(string)
+		if !ok {
+			return nil // Key is not a string
+		}
+
+		if _, exists := keys[keyStr]; exists {
+			return nil // Duplicate keys - can't use as map
+		}
+
+		keys[keyStr] = obj
+	}
+
+	return keys
 }
 
 // isOptionalNodeField returns true for node fields that n8n doesn't consistently

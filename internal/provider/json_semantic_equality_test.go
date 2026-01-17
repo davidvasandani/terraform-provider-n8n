@@ -295,3 +295,64 @@ func TestJsonSemanticEqualWithOptionalFields(t *testing.T) {
 		})
 	}
 }
+
+func TestJsonSemanticEqualWithParameterOrder(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        string
+		b        string
+		expected bool
+	}{
+		{
+			name:     "parameters in different order should be equal",
+			a:        `[{"id":"node1","parameters":[{"key":"options","value":"a"},{"key":"sheetName","value":"b"},{"key":"documentId","value":"c"}]}]`,
+			b:        `[{"id":"node1","parameters":[{"key":"documentId","value":"c"},{"key":"options","value":"a"},{"key":"sheetName","value":"b"}]}]`,
+			expected: true,
+		},
+		{
+			name:     "parameters with different values should not be equal",
+			a:        `[{"id":"node1","parameters":[{"key":"options","value":"a"}]}]`,
+			b:        `[{"id":"node1","parameters":[{"key":"options","value":"different"}]}]`,
+			expected: false,
+		},
+		{
+			name:     "parameters with missing key should not be equal",
+			a:        `[{"id":"node1","parameters":[{"key":"options","value":"a"},{"key":"extra","value":"b"}]}]`,
+			b:        `[{"id":"node1","parameters":[{"key":"options","value":"a"}]}]`,
+			expected: false,
+		},
+		{
+			name:     "nested nodes with parameters in different order",
+			a:        `[{"id":"n1","parameters":[{"key":"a"},{"key":"b"}]},{"id":"n2","parameters":[{"key":"x"},{"key":"y"}]}]`,
+			b:        `[{"id":"n1","parameters":[{"key":"b"},{"key":"a"}]},{"id":"n2","parameters":[{"key":"y"},{"key":"x"}]}]`,
+			expected: true,
+		},
+		{
+			name:     "realistic google sheets node parameter order",
+			a:        `[{"id":"read-tickers","name":"Read_tickers","parameters":[{"key":"options","type":"unknown","value":"map[]"},{"key":"sheetName","type":"unknown","value":"stocks"},{"key":"documentId","type":"unknown","value":"123"}]}]`,
+			b:        `[{"id":"read-tickers","name":"Read_tickers","parameters":[{"key":"documentId","type":"unknown","value":"123"},{"key":"options","type":"unknown","value":"map[]"},{"key":"sheetName","type":"unknown","value":"stocks"}]}]`,
+			expected: true,
+		},
+		{
+			name:     "regular arrays without key field should preserve order",
+			a:        `{"position":[100, 200]}`,
+			b:        `{"position":[200, 100]}`,
+			expected: false,
+		},
+		{
+			name:     "empty parameters arrays should be equal",
+			a:        `[{"id":"node1","parameters":[]}]`,
+			b:        `[{"id":"node1","parameters":[]}]`,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := jsonSemanticEqual(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("jsonSemanticEqual(%q, %q) = %v, want %v", tt.a, tt.b, result, tt.expected)
+			}
+		})
+	}
+}
