@@ -101,10 +101,16 @@ func (r *workflowResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"nodes": schema.StringAttribute{
 				Required:    true,
 				Description: "JSON-encoded array of workflow nodes.",
+				PlanModifiers: []planmodifier.String{
+					JSONSemanticEquality(),
+				},
 			},
 			"connections": schema.StringAttribute{
 				Required:    true,
 				Description: "JSON-encoded connections between nodes.",
+				PlanModifiers: []planmodifier.String{
+					JSONSemanticEquality(),
+				},
 			},
 			"settings": schema.SingleNestedAttribute{
 				Optional:    true,
