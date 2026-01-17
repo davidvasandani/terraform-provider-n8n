@@ -110,6 +110,10 @@ type Node struct {
 
 	// Name is the user-defined name of the node.
 	Name string `json:"name"`
+
+	// Credentials holds node-specific credential references for authentication.
+	// This field is optional and only present for nodes that require credentials.
+	Credentials map[string]interface{} `json:"credentials,omitempty"`
 }
 
 // Settings contains global execution settings for a workflow.

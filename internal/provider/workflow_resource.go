@@ -164,14 +164,23 @@ func (r *workflowResource) Schema(_ context.Context, _ resource.SchemaRequest, r
 			"version_id": schema.StringAttribute{
 				Computed:    true,
 				Description: "Workflow version ID.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"created_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Timestamp when the workflow was created.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"updated_at": schema.StringAttribute{
 				Computed:    true,
 				Description: "Timestamp when the workflow was last updated.",
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 		},
 	}
